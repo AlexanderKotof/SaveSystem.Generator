@@ -49,6 +49,8 @@ namespace SaveDataGenerator
 
         public void Execute(GeneratorExecutionContext context)
         {
+            var created = new HashSet<INamedTypeSymbol>();
+            
             foreach (var tree in context.Compilation.SyntaxTrees)
             {
                 var semanticModel = context.Compilation.GetSemanticModel(tree);
@@ -61,14 +63,28 @@ namespace SaveDataGenerator
 
                     if (!HasSaveDataAttribute(typeSymbol)) continue;
                     
+                    if (!created.Add(typeSymbol)) continue;
+
                     Log($"Generating {typeSymbol.Name}...");
 
-                    var code = Generate(typeSymbol);
-                    if (!string.IsNullOrWhiteSpace(code))
+                    try
                     {
-                        context.AddSource($"{typeSymbol.Name}.SaveData.g.cs", SourceText.From(code, Encoding.UTF8));
-                        
-                        Log($"Generated {typeSymbol.Name}.SaveData.g.cs\nContent:\n{code}");
+                        var code = Generate(typeSymbol);
+
+                        if (!string.IsNullOrWhiteSpace(code))
+                        {
+                            context.AddSource($"{typeSymbol.Name}.SaveData.g.cs", SourceText.From(code, Encoding.UTF8));
+
+                            Log($"Generated {typeSymbol.Name}.SaveData.g.cs\nContent:\n{code}");
+                        }
+                        else
+                        {
+                            Log($"Generated empty output for {typeSymbol.Name}");
+                        }
+                    }
+                    catch (Exception e)
+                    {
+                        Log("Exception: " + e.Message);
                     }
                 }
             }
@@ -109,7 +125,9 @@ namespace SaveDataGenerator
                     usings.Add(typeInfo.Namespace);
 
                 var typeName = GetShortTypeName(typeInfo.TypeName, usings);
-                dtoFields.Add($"public {typeName} {m.Name} {{ get; set; }}");
+                
+                var dtoPropName = typeInfo.IsConfig ? m.Name + "Id" : m.Name;
+                dtoFields.Add($"public {typeName} {dtoPropName} {{ get; set; }}");
 
                 // ToSaveData
                 string readExpr = $"model.{m.Name}";
@@ -119,23 +137,29 @@ namespace SaveDataGenerator
 
                 if (typeInfo.IsNestedSaveData)
                     readExpr += ".ToSaveData()";
+                
+                if (typeInfo.IsConfig)
+                    readExpr += ".Id";
 
-                toSaveLines.Add($"{m.Name} = {readExpr}");
+                toSaveLines.Add($"{dtoPropName} = {readExpr}");
 
                 // ApplySaveData
                 string writeExpr;
 
                 if (typeInfo.IsReactive)
                 {
-                    writeExpr = $"model.{m.Name}.Value = {GetApplyValue(typeInfo, m.Name)};";
+                    writeExpr = $"model.{m.Name}.Value = {GetApplyValue(typeInfo, dtoPropName)};";
                 }
-                // else if (typeInfo.IsNestedSaveData)
-                // {
-                //     writeExpr = $"model.{m.Name} = _resolver.Resolve({GetApplyValue(typeInfo, m.Name)});";
-                // }
+                else if (typeInfo.IsConfig)
+                {
+                    //Reading only, left processing configs to higher layer
+                    Log($"Config found {m.Name}!");
+                    //writeExpr = $"model.{m.Name} = _resolver.Resolve({GetApplyValue(typeInfo, m.Name)});";
+                    continue;
+                }
                 else if (m.SetMethod != null)
                 {
-                    writeExpr = $"model.{m.Name} = {GetApplyValue(typeInfo, m.Name)};";
+                    writeExpr = $"model.{m.Name} = {GetApplyValue(typeInfo, dtoPropName)};";
                 }
                 else
                 {
@@ -233,7 +257,7 @@ namespace SaveDataGenerator
             string typeName = typeInfo;
             foreach (var ns in usings)
             {
-                if (string.Equals(ns, "System"))
+                if (Equals(ns, "System"))
                     continue;
                 
                 string replce = ns + ".";
@@ -270,13 +294,25 @@ namespace SaveDataGenerator
                 return info;
             }
             
+            // --- вложенные SaveData
+            if (IsConfig(named))
+            {
+                info.IsConfig = true;
+                info.TypeName = $"string";
+                return info;
+            }
+            
             info.TypeName = GetSerializedType(type, usings, out bool isReactive);
             info.IsReactive = isReactive;
             info.Skip = string.IsNullOrEmpty(info.TypeName);
             return info;
         }
-        
-        
+
+        private static bool IsConfig(INamedTypeSymbol named)
+        {
+            return named.Name.Contains("Config") || named.ContainingNamespace.ToDisplayString().Contains("Configs");
+        }
+
         private static string GetSerializedType(ITypeSymbol type, HashSet<string> usings, out bool isReactive)
         {
             isReactive = false;
@@ -342,6 +378,7 @@ namespace SaveDataGenerator
             public bool IsReactive;
             public bool IsNestedSaveData;
             public bool Skip;
+            public bool IsConfig;
         }
     }
 }
