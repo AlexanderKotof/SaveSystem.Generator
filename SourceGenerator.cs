@@ -50,10 +50,14 @@ namespace SaveDataGenerator
         {
             var created = new HashSet<INamedTypeSymbol>(SymbolEqualityComparer.Default);
 
+            TryFindSaveDataAttribute(context);
+
             foreach (var tree in context.Compilation.SyntaxTrees)
             {
                 var semanticModel = context.Compilation.GetSemanticModel(tree);
                 var types = tree.GetRoot().DescendantNodes().OfType<TypeDeclarationSyntax>();
+                
+               
 
                 foreach (var typeDecl in types)
                 {
@@ -70,7 +74,8 @@ namespace SaveDataGenerator
                         if (!string.IsNullOrWhiteSpace(code))
                         {
                             context.AddSource($"{typeSymbol.Name}.SaveData.g.cs", SourceText.From(code, Encoding.UTF8));
-                            Log($"Generated {typeSymbol.Name}.SaveData.g.cs\nContent:\n{code}");
+                            Log($"Generated {typeSymbol.Name}.SaveData.g.cs\n");
+                            //Log($"Content:\n{code}");
                         }
                         else
                         {
@@ -81,6 +86,23 @@ namespace SaveDataGenerator
                     {
                         Log("Exception: " + e.Message);
                     }
+                }
+            }
+        }
+
+        private void TryFindSaveDataAttribute(GeneratorExecutionContext context)
+        {
+            AttributeSyntax? saveDataAttributeDecl;
+            foreach (var tree in context.Compilation.SyntaxTrees)
+            {
+                //TODO: find SaveDataAttribute first
+                saveDataAttributeDecl = tree.GetRoot().DescendantNodes().OfType<AttributeSyntax>()
+                    .FirstOrDefault(s => s.Name.ToString().Contains("SaveData"));
+
+                if (saveDataAttributeDecl != null)
+                {
+                    Log($"*****  Found save data attribute {saveDataAttributeDecl.ToString()}, {saveDataAttributeDecl.Name.ToString()}");
+                    break;
                 }
             }
         }
@@ -138,9 +160,7 @@ namespace SaveDataGenerator
             var dtoPropName = typeInfo.IsConfig ? m.Name + "Id" : m.Name;
 
             // 1. Поле в DTO
-            dtoFields.Add(typeInfo.IsCollection 
-                ? $"public {typeInfo.CollectionElementType!.DtoTypeName}[] {dtoPropName} {{ get; set; }}" 
-                : $"public {typeInfo.DtoTypeName} {dtoPropName} {{ get; set; }}");
+            dtoFields.Add($"public {typeInfo.DtoTypeName} {dtoPropName} {{ get; set; }}");
 
             // 2. ToSaveData
             string readExpr = $"model.{m.Name}";
@@ -150,6 +170,7 @@ namespace SaveDataGenerator
 
             if (typeInfo.IsCollection)
             {
+                //TODO: add possibility custom selection of collection elements
                 var elemMap = GetElementMapExpr(typeInfo.CollectionElementType!);
                 toSaveLines.Add($"{dtoPropName} = {readExpr}?.Select(x => {elemMap}).ToArray() ?? Array.Empty<{typeInfo.CollectionElementType!.DtoTypeName}>()");
             }
@@ -170,6 +191,7 @@ namespace SaveDataGenerator
         {
             if (info.IsNestedSaveData) return "x.ToSaveData()";
             if (info.IsReactive) return "x.Value";
+            if (info.IsConfig) return "x.Id";
             return "x";
         }
 
@@ -328,7 +350,7 @@ namespace SaveDataGenerator
                 {
                     info.IsCollection = true;
                     info.CollectionElementType = colInfo;
-                    info.DtoTypeName = $"List<{colInfo.DtoTypeName}>";
+                    info.DtoTypeName = $"{colInfo.DtoTypeName}[]";
                     info.ModelTypeName = named.ToDisplayString();
                     return info;
                 }
