@@ -126,15 +126,17 @@ namespace SaveDataGenerator
 
             if (typeInfo.Skip) return;
 
-            var dtoPropName = typeInfo.HasId ? m.Name + "Id" : m.Name;
+            var dtoPropName = m.Name; // typeInfo.HasId ? m.Name + "Id" : m.Name;
 
             // 1. Поле в DTO
             dtoFields.Add($"public {typeInfo.DtoTypeName} {dtoPropName} {{ get; set; }}");
 
+            var selector = AttributeHelper.GetSaveDataSelector(m);
+
             // 2. ToSaveData
             string readExpr = $"model.{m.Name}";
             if (typeInfo.IsReactive) readExpr += ".Value";
-            if (typeInfo.HasId) readExpr += ".Id";
+            //if (typeInfo.HasId) readExpr += ".Id";
             if (typeInfo.IsNestedSaveData) readExpr += ".ToSaveData()";
 
             if (typeInfo.IsCollection)
@@ -142,10 +144,12 @@ namespace SaveDataGenerator
                 var elemMap = GetElementMapExpr(typeInfo.CollectionElementType!);
                 var filter = AttributeHelper.GetSaveDataFilter(m);
                 var filterExpr = filter == null ? string.Empty : $".Where({filter})";
-                toSaveLines.Add($"{dtoPropName} = {readExpr}?{filterExpr}.Select(x => {elemMap}).ToArray() ?? Array.Empty<{typeInfo.CollectionElementType!.DtoTypeName}>()");
+                var selectorExpr = selector == null ? string.Empty : $".Select(x => x.{selector})";
+                toSaveLines.Add($"{dtoPropName} = {readExpr}?{filterExpr}.Select(x => {elemMap}){selectorExpr}.ToArray() ?? Array.Empty<{typeInfo.CollectionElementType!.DtoTypeName}>()");
             }
             else
             {
+                if (selector != null) readExpr += $".{selector}";
                 toSaveLines.Add($"{dtoPropName} = {readExpr}");
             }
 
@@ -161,7 +165,7 @@ namespace SaveDataGenerator
         {
             if (info.IsNestedSaveData) return "x.ToSaveData()";
             if (info.IsReactive) return "x.Value";
-            if (info.HasId) return "x.Id";
+            //if (info.HasId) return "x.Id";
             return "x";
         }
 
@@ -175,23 +179,6 @@ namespace SaveDataGenerator
                 //TODO: can't be implemented right now
                 // more complex logic required
                 return $"//*** Data Collection: {m.Name}";
-                
-//                 var elemApply = GetElementApplyExpr(typeInfo.CollectionElementType!, modelExpr, dataExpr);
-//                 return $"if ({dataExpr} != null)\n\t\t{{\n" +
-//                        $"\t\t\tif ({modelExpr} is ICollection<{typeInfo.CollectionElementType!.ModelTypeName}> col)\n" +
-//                        @"			{
-//                 col.Clear();
-// " +
-//                        $"\t\t\t\tforeach (var x in {dataExpr}) col.Add({elemApply});\n" +
-//                        @"            }
-//         }";  
-
-//             else
-//             {
-//                 // Fallback for non-ICollection properties
-// " +
-//                 $"\t\t\t\t{modelExpr} = {dataExpr}.Select(x => {elemApply}).ToList();\n" +
-//                 @"            }"
             }
 
             if (typeInfo.IsNestedSaveData)
@@ -204,11 +191,11 @@ namespace SaveDataGenerator
                 return $"{modelExpr}.Value = {dataExpr};";
             }
 
-            if (typeInfo.HasId)
-            {
-                Logger.Log($"Config found {m.Name}, skipping apply.");
-                return string.Empty;
-            }
+            // if (typeInfo.HasId)
+            // {
+            //     Logger.Log($"Config found {m.Name}, skipping apply.");
+            //     return string.Empty;
+            // }
 
             if (m.SetMethod is { DeclaredAccessibility: Accessibility.Public })
             {
@@ -311,14 +298,10 @@ namespace SaveDataGenerator
             usings.Add(type.ContainingNamespace?.ToDisplayString());
 
             var info = new TypeInfo();
-            
-            // TODO: filtering
 
             if (type is INamedTypeSymbol named)
             {
                 AttributeHelper.PrintAttributes(named);
-
-                
                 // Проверка на коллекции
                 if (TryResolveCollection(named, usings, out var colInfo))
                 {
@@ -329,7 +312,7 @@ namespace SaveDataGenerator
                     return info;
                 }
                 
-                //TODO: проверка на словари
+                // TODO: проверка на словари
                 
                 // Проверка на UniRx ReactiveProperty<T>
                 var defName = named.OriginalDefinition?.ToDisplayString() ?? string.Empty;
@@ -345,15 +328,22 @@ namespace SaveDataGenerator
                 {
                     return ResolveType(named.BaseType!, usings);
                 }
-                
-                // Проверка на Config
-                if (IsHasId(named))
+
+                var selector = AttributeHelper.GetSaveDataSelector(named);
+                if (selector != null)
                 {
-                    info.HasId = true;
-                    info.DtoTypeName = "Guid";
-                    info.ModelTypeName = named.ToDisplayString();
+                    //TODO: implement selection by property
                     return info;
                 }
+                
+                // Проверка на Config
+                // if (IsHasId(named))
+                // {
+                //     //info.HasId = true;
+                //     info.DtoTypeName = "Guid";
+                //     info.ModelTypeName = named.ToDisplayString();
+                //     return info;
+                // }
                 
                 // Вложенный SaveData
                 if (HasSaveDataAttribute(named))
@@ -414,7 +404,7 @@ namespace SaveDataGenerator
             public bool IsCollection;
             public string Filter;
             public bool Skip;
-            public bool HasId;
+            //public bool HasId;
             public TypeInfo? CollectionElementType;
 
             public static TypeInfo SkipType() => new() { Skip = true };
