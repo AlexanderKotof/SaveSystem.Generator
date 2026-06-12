@@ -165,11 +165,11 @@ namespace SaveDataGenerator
             dtoFields.Add($"public {typeInfo.DtoTypeName} {dtoPropName} {{ get; set; }}");
 
             // ToSaveData
-            string readExpr = $"model.{m.Name}{n}";
+            string readExpr = $"model.{m.Name}";
             if (typeInfo.IsReactive) readExpr += ".Value";
 
             // If it is nested data, but not selected
-            if (typeInfo.IsNestedSaveData && selector == null) readExpr += ".ToSaveData()";
+            if (typeInfo.IsNestedSaveData && selector == null) readExpr += $".ToSaveData()";
 
             if (typeInfo.IsCollection)
             {
@@ -184,7 +184,7 @@ namespace SaveDataGenerator
             }
             else
             {
-                if (selector != null) readExpr += $".{selector}";
+                if (selector != null) readExpr += $"{n}.{selector}";
                 toSaveLines.Add($"{dtoPropName} = {readExpr}");
             }
 
@@ -199,8 +199,8 @@ namespace SaveDataGenerator
         private static string GetElementMapExpr(TypeInfo info, string? selector, out bool selectRequired)
         {
             selectRequired = true;
-            if (!string.IsNullOrEmpty(selector)) return $"x.{selector}"; // 🔹 Селектор в приоритете
-            if (info.IsNestedSaveData) return "x.ToSaveData()";
+            if (!string.IsNullOrEmpty(selector)) return $"x.{selector}";
+            if (info.IsNestedSaveData) return $"x.ToSaveData()";
             if (info.IsReactive) return "x.Value";
 
             selectRequired = false;
@@ -219,12 +219,12 @@ namespace SaveDataGenerator
 
             if (typeInfo.IsNestedSaveData && typeInfo.IsReactive)
             {
-                return $"{modelExpr}.Value.ApplySaveData({dataExpr});";
+                return $"{modelExpr}.Value{n}.ApplySaveData({dataExpr});";
             }
 
             if (typeInfo.IsNestedSaveData)
             {
-                return $"{modelExpr}.ApplySaveData({dataExpr});";
+                return $"{modelExpr}{n}.ApplySaveData({dataExpr});";
             }
 
             if (typeInfo.IsReactive)

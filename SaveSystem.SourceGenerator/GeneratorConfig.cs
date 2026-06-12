@@ -12,8 +12,8 @@ public record GeneratorConfig
     {
         return new GeneratorConfig
         {
-            EmitLogs = options.GetBool("build_property.SaveDataGenerator_EmitLogs"),
-            EnableNullchecks = options.GetBool("build_property.SaveDataGenerator_EnableNullchecks"),
+            EmitLogs = options.GetBool("build_property.SaveDataGenerator_EmitLogs", true),
+            EnableNullchecks = options.GetBool("build_property.SaveDataGenerator_EnableNullchecks", true),
             NullableContext = options.GetString("build_property.SaveDataGenerator_NullableContext") ?? "enable"
         };
     }
