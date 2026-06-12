@@ -161,15 +161,15 @@ namespace SaveDataGenerator
 
             if (typeInfo.Skip) return;
 
-            var dtoPropName = m.Name;
+            var dtoPropName = string.Concat(m.Name, selector);
             dtoFields.Add($"public {typeInfo.DtoTypeName} {dtoPropName} {{ get; set; }}");
 
             // ToSaveData
-            string readExpr = $"model.{m.Name}";
+            string readExpr = $"model.{m.Name}{n}";
             if (typeInfo.IsReactive) readExpr += ".Value";
 
             // If it is nested data, but not selected
-            if (typeInfo.IsNestedSaveData && !typeInfo.HasSelector) readExpr += ".ToSaveData()";
+            if (typeInfo.IsNestedSaveData && selector == null) readExpr += ".ToSaveData()";
 
             if (typeInfo.IsCollection)
             {
@@ -178,12 +178,12 @@ namespace SaveDataGenerator
                 var filterExpr = filter == null ? string.Empty : $".Where({filter})";
                 var selectorExpr = selectRequired ? $".Select(x => {elemMap})" : string.Empty;
 
-                var saveLine = $"{dtoPropName} = {readExpr}{n}{filterExpr}{selectorExpr}{(NullableEnabled ? $".ToArray() ?? Array.Empty<{typeInfo.CollectionElementType!.DtoTypeName}>()" : ".ToArray()")}";
+                var saveLine = $"{dtoPropName} = {readExpr}{n}{filterExpr}{selectorExpr}{(NullableEnabled ?
+                    $".ToArray() ?? Array.Empty<{typeInfo.CollectionElementType!.DtoTypeName}>()" : ".ToArray()")}";
                 toSaveLines.Add(saveLine);
             }
             else
             {
-                // Для не-коллекций: если селектор есть, но тип уже разрешён через свойство (HasSelector), не добавляем .{selector} повторно
                 if (selector != null) readExpr += $".{selector}";
                 toSaveLines.Add($"{dtoPropName} = {readExpr}");
             }
