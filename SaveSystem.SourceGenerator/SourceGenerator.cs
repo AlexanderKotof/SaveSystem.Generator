@@ -396,6 +396,11 @@ namespace SaveDataGenerator
                     return inner;
                 }
 
+                if (named.Name.EndsWith("ReactiveProperty"))
+                {
+                    return ResolveType(named.BaseType!, usings, selector);
+                }
+
                 // 🔹 3. Селектор для не-коллекции
                 if (!string.IsNullOrEmpty(selector))
                 {
