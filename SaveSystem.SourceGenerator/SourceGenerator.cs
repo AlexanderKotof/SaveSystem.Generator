@@ -169,7 +169,7 @@ namespace SaveDataGenerator
             if (typeInfo.IsReactive) readExpr += ".Value";
 
             // If it is nested data, but not selected
-            if (typeInfo.IsNestedSaveData && selector == null) readExpr += $".ToSaveData()";
+            if (typeInfo.IsNestedSaveData && selector == null) readExpr += ".ToSaveData()";
 
             if (typeInfo.IsCollection)
             {
@@ -178,13 +178,19 @@ namespace SaveDataGenerator
                 var filterExpr = filter == null ? string.Empty : $".Where({filter})";
                 var selectorExpr = selectRequired ? $".Select(x => {elemMap})" : string.Empty;
 
-                var saveLine = $"{dtoPropName} = {readExpr}{n}{filterExpr}{selectorExpr}{(NullableEnabled ?
-                    $".ToArray() ?? Array.Empty<{typeInfo.CollectionElementType!.DtoTypeName}>()" : ".ToArray()")}";
+                var saveLine = $"{dtoPropName} = {readExpr}{n}{filterExpr}{selectorExpr}.ToArray(){(NullableEnabled ?
+                    $" ?? Array.Empty<{typeInfo.CollectionElementType!.DtoTypeName}>()" : "")}";
                 toSaveLines.Add(saveLine);
             }
             else
             {
-                if (selector != null) readExpr += $"{n}.{selector}";
+                if (selector != null)
+                {
+                    readExpr += NullableEnabled ?
+                        $"{n}.{selector} ?? default({typeInfo.DtoTypeName})" :
+                        $".{selector}";
+                }
+
                 toSaveLines.Add($"{dtoPropName} = {readExpr}");
             }
 
@@ -200,7 +206,7 @@ namespace SaveDataGenerator
         {
             selectRequired = true;
             if (!string.IsNullOrEmpty(selector)) return $"x.{selector}";
-            if (info.IsNestedSaveData) return $"x.ToSaveData()";
+            if (info.IsNestedSaveData) return "x.ToSaveData()";
             if (info.IsReactive) return "x.Value";
 
             selectRequired = false;
@@ -214,17 +220,18 @@ namespace SaveDataGenerator
 
             if (typeInfo.IsCollection)
             {
+                //TODO: implement basic converting
                 return $"//*** Data Collection: {m.Name}";
             }
 
             if (typeInfo.IsNestedSaveData && typeInfo.IsReactive)
             {
-                return $"{modelExpr}.Value{n}.ApplySaveData({dataExpr});";
+                return $"{modelExpr}.Value.ApplySaveData({dataExpr});";
             }
 
             if (typeInfo.IsNestedSaveData)
             {
-                return $"{modelExpr}{n}.ApplySaveData({dataExpr});";
+                return $"{modelExpr}.ApplySaveData({dataExpr});";
             }
 
             if (typeInfo.IsReactive)
@@ -308,7 +315,7 @@ namespace SaveDataGenerator
             WriteLine("{");
 
             indentation++;
-            WriteLine("Debug.LogError(\"Cannot convert Model {nameof(" + type.Name + ")}: model is null.\");");
+            WriteLine($"Debug.LogError($\"Cannot convert Model {{nameof({type.Name})}}: model is null.\");");
             WriteLine("return default;");
             indentation--;
 
@@ -338,11 +345,11 @@ namespace SaveDataGenerator
 
             indentation++;
 
-            WriteLine(@"if (model == null)");
+            WriteLine("if (model == null)");
             WriteLine("{");
 
             indentation++;
-            WriteLine("Debug.LogError(\"Can not apply save data! Model {nameof(" + type.Name + @")} is null."");");
+            WriteLine($"Debug.LogError($\"Can not apply save data! Model {{nameof({type.Name})}} is null.\");");
             WriteLine("return;");
             indentation--;
 
@@ -350,6 +357,8 @@ namespace SaveDataGenerator
             WriteLine();
 
             foreach (var l in applyLines) WriteLine($"{l}");
+
+            indentation--;
 
             WriteLine("}");
 
