@@ -14,7 +14,9 @@ A flexible Roslyn Source Generator for automatic mapping of complex Unity/C# gam
 
 Mark your classes and properties with `[SaveData]`, and the generator handles the rest — including reactive properties, nested objects, collections, filtering, and property selection.
 
-Perfect for Unity projects using **UniRx**, **Newtonsoft.Json**.
+Perfect for Unity projects using **UniRx**.
+
+The package has no dependencies. This means you can use any serializer you want.
 
 ## ✨ Key Features
 
@@ -24,7 +26,7 @@ Perfect for Unity projects using **UniRx**, **Newtonsoft.Json**.
 public class SomeDataModel
 {
     [SaveData]
-    public SerializableData SerializableData { get; set; }
+    public SerializableData SomeData { get; set; }
     
     [SaveData]
     public ReactiveProperty<int> Health { get; } = new();
@@ -63,7 +65,7 @@ public IEnumerable<GameConfigBase> ConfigsWithSelector => Configs;
 
 Generated output:
 ```csharp
-Configs = model.Configs.Select(x => x.Id).ToArray() ?? Array.Empty<Guid>(),
+ConfigsId = model.Configs.Select(x => x.Id).ToArray() ?? Array.Empty<Guid>(),
 ConfigsWithSelector = model.ConfigsWithSelector
     .Where(x => x.someData == 42)
     .Select(x => x.name)
@@ -108,7 +110,7 @@ https://github.com/AlexanderKotof/SaveSystem.git?path=/SaveSystem/Assets
 ```
 
 Or just insert next line in ProjectRoot/Packages/manifest.json:
-```json
+```
 {
 	"com.newbeedev.save-system-gen": "https://github.com/AlexanderKotof/SaveSystem.git?path=/SaveSystem/Assets",
 	...
